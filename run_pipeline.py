@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 from datetime import datetime
@@ -113,16 +114,30 @@ def step(text: str):
 # Helpers: subprocess execution
 # ---------------------------------------------------------------------------
 
-def run_tool(cmd: str, timeout: int = 600, check: bool = False) -> subprocess.CompletedProcess:
+def slug(text: str, max_len: int = 40, fallback: str = "issue") -> str:
+    """
+    Reduce an arbitrary string to a filesystem- and argv-safe token.
+
+    Panel/review JSON is model-generated, so any string lifted out of it is
+    untrusted input. Keeping only [A-Za-z0-9_-] means such a value can never
+    escape a filename or an argv element downstream.
+    """
+    cleaned = re.sub(r'[^A-Za-z0-9_-]+', '_', str(text)).strip('_')
+    return cleaned[:max_len] or fallback
+
+
+def run_argv(argv: list[str], timeout: int = 600,
+             check: bool = False) -> subprocess.CompletedProcess:
     """
     Run a tool as a subprocess, capturing output.
-    Uses shell=True so callers can pass full command strings.
+    argv is passed without a shell, so arguments never undergo word splitting
+    or metacharacter expansion.
     Returns CompletedProcess; never raises unless check=True.
     """
-    step(f"RUN: {cmd}")
+    step(f"RUN: {' '.join(argv)}")
     try:
         result = subprocess.run(
-            cmd, shell=True, capture_output=True, text=True,
+            argv, capture_output=True, text=True,
             timeout=timeout, cwd=str(BASE_DIR),
         )
         if result.returncode != 0:
@@ -132,30 +147,47 @@ def run_tool(cmd: str, timeout: int = 600, check: bool = False) -> subprocess.Co
                 print(f"    stderr: {stderr_preview}")
         if check and result.returncode != 0:
             raise subprocess.CalledProcessError(
-                result.returncode, cmd, result.stdout, result.stderr)
+                result.returncode, argv, result.stdout, result.stderr)
         return result
     except subprocess.TimeoutExpired:
         print(f"    ERROR: timed out after {timeout}s")
         # Return a fake CompletedProcess for graceful handling
-        fake = subprocess.CompletedProcess(cmd, returncode=-1, stdout="", stderr="TIMEOUT")
-        return fake
+        return subprocess.CompletedProcess(argv, returncode=-1, stdout="", stderr="TIMEOUT")
+    except FileNotFoundError as e:
+        print(f"    ERROR: command not found: {argv[0]}")
+        return subprocess.CompletedProcess(argv, returncode=-1, stdout="", stderr=str(e))
 
 
-def uv_run(script: str, timeout: int = 600) -> subprocess.CompletedProcess:
-    """Shorthand for 'uv run python <script>' from project root."""
-    return run_tool(f"uv run python {script}", timeout=timeout)
+def uv_run(script: str, *script_args, timeout: int = 600) -> subprocess.CompletedProcess:
+    """Shorthand for 'uv run python <script> [args...]' from project root."""
+    return run_argv(["uv", "run", "python", script, *[str(a) for a in script_args]],
+                    timeout=timeout)
 
 
 # ---------------------------------------------------------------------------
 # Helpers: git operations
 # ---------------------------------------------------------------------------
 
+# Directories and files the pipeline is allowed to commit. Anything else a
+# user happens to leave in the working tree stays unstaged.
+COMMIT_PATHS = ["chapters", "typeset", "state.json", "results.tsv"]
+
+
+def staged_pathspecs() -> list[str]:
+    """Existing paths from COMMIT_PATHS, plus any top-level .md files."""
+    paths = [p for p in COMMIT_PATHS if (BASE_DIR / p).exists()]
+    paths += sorted(p.name for p in BASE_DIR.glob("*.md"))
+    return paths
+
+
 def git_add_commit(message: str) -> str:
-    """Stage all changes and commit. Returns short hash or empty string."""
-    run_tool("git add -A")
-    result = run_tool(f'git commit -m "{message}" --allow-empty')
+    """Stage the pipeline's own outputs and commit. Returns short hash or ''."""
+    pathspecs = staged_pathspecs()
+    if pathspecs:
+        run_argv(["git", "add", "-A", "--", *pathspecs])
+    result = run_argv(["git", "commit", "-m", message, "--allow-empty"])
     if result.returncode == 0:
-        hash_result = run_tool("git rev-parse --short HEAD")
+        hash_result = run_argv(["git", "rev-parse", "--short", "HEAD"])
         commit_hash = hash_result.stdout.strip()
         step(f"GIT COMMIT: {commit_hash} — {message}")
         return commit_hash
@@ -167,12 +199,12 @@ def git_add_commit(message: str) -> str:
 def git_reset_hard(ref: str = "HEAD~1"):
     """Hard reset to discard bad changes."""
     step(f"GIT RESET: {ref}")
-    run_tool(f"git reset --hard {ref}")
+    run_argv(["git", "reset", "--hard", ref])
 
 
 def git_short_hash() -> str:
     """Get current HEAD short hash."""
-    r = run_tool("git rev-parse --short HEAD")
+    r = run_argv(["git", "rev-parse", "--short", "HEAD"])
     return r.stdout.strip() if r.returncode == 0 else "unknown"
 
 
@@ -270,7 +302,7 @@ def run_foundation(state: dict) -> dict:
 
         # 2. Evaluate
         step("Evaluating foundation...")
-        eval_result = uv_run("evaluate.py --phase=foundation", timeout=300)
+        eval_result = uv_run("evaluate.py", "--phase=foundation", timeout=300)
         score = parse_score(eval_result.stdout, "overall_score")
         lore = parse_lore_score(eval_result.stdout)
 
@@ -334,7 +366,7 @@ def run_drafting(state: dict) -> dict:
             step(f"Attempt {attempt}/{MAX_CHAPTER_ATTEMPTS}")
 
             # Draft
-            draft_result = uv_run(f"draft_chapter.py {ch}", timeout=600)
+            draft_result = uv_run("draft_chapter.py", ch, timeout=600)
             if draft_result.returncode != 0:
                 step(f"Draft failed (exit {draft_result.returncode}), retrying...")
                 continue
@@ -349,7 +381,7 @@ def run_drafting(state: dict) -> dict:
             step(f"Drafted {word_count} words")
 
             # Evaluate
-            eval_result = uv_run(f"evaluate.py --chapter={ch}", timeout=300)
+            eval_result = uv_run("evaluate.py", f"--chapter={ch}", timeout=300)
             score = parse_score(eval_result.stdout, "overall_score")
             step(f"Chapter {ch} score: {score}")
 
@@ -368,7 +400,8 @@ def run_drafting(state: dict) -> dict:
                            "discard", f"Chapter {ch} attempt {attempt}")
                 # Remove the bad chapter file so next attempt starts fresh
                 if ch_file.exists():
-                    run_tool(f"git checkout -- chapters/ch_{ch:02d}.md 2>/dev/null || true")
+                    # Best effort: fails harmlessly if the file is untracked.
+                    run_argv(["git", "checkout", "--", f"chapters/ch_{ch:02d}.md"])
 
         if not drafted:
             step(f"WARNING: Chapter {ch} failed all {MAX_CHAPTER_ATTEMPTS} attempts, "
@@ -405,6 +438,9 @@ def parse_panel_consensus(panel_path: Path) -> list[dict]:
     Parse reader_panel.json to find chapters with consensus issues.
     Returns list of dicts: {chapter, question, flagged_by, details}
     sorted by number of readers who flagged (descending).
+
+    'question' is slugged here, at the trust boundary — the panel JSON is
+    model-generated, and the field flows into filenames and argv downstream.
     """
     if not panel_path.exists():
         return []
@@ -415,9 +451,13 @@ def parse_panel_consensus(panel_path: Path) -> list[dict]:
 
     # Look at disagreements — these are flagged by some but not all readers
     for d in data.get("disagreements", []):
+        try:
+            chapter = int(d.get("chapter", 0))
+        except (TypeError, ValueError):
+            continue
         items.append({
-            "chapter": d.get("chapter", 0),
-            "question": d.get("question", ""),
+            "chapter": chapter,
+            "question": slug(d.get("question", "")),
             "flagged_by": d.get("flagged_by", []),
             "count": len(d.get("flagged_by", [])),
         })
@@ -482,14 +522,14 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
 
         # -- Step 1: Adversarial editing pass --
         step("Running adversarial editing on all chapters...")
-        uv_run("adversarial_edit.py all", timeout=900)
+        uv_run("adversarial_edit.py", "all", timeout=900)
 
         # -- Step 2: Apply mechanical cuts (only if apply_cuts.py exists) --
         apply_cuts = BASE_DIR / "apply_cuts.py"
         if apply_cuts.exists():
             step("Applying mechanical cuts (OVER-EXPLAIN, REDUNDANT)...")
-            run_tool("uv run python apply_cuts.py all "
-                     "--types OVER-EXPLAIN REDUNDANT --min-fat 15", timeout=300)
+            uv_run("apply_cuts.py", "all", "--types", "OVER-EXPLAIN", "REDUNDANT",
+                   "--min-fat", "15", timeout=300)
         else:
             step("apply_cuts.py not found, skipping mechanical cuts")
 
@@ -516,7 +556,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             banner(f"  Revising Ch {ch_num} ({question}) [{idx+1}/{len(consensus_items)}]", ".")
 
             # Snapshot the current chapter score for comparison
-            pre_eval = uv_run(f"evaluate.py --chapter={ch_num}", timeout=300)
+            pre_eval = uv_run("evaluate.py", f"--chapter={ch_num}", timeout=300)
             pre_score = parse_score(pre_eval.stdout, "overall_score")
 
             # Generate revision brief
@@ -524,7 +564,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             gen_brief = BASE_DIR / "gen_brief.py"
             if gen_brief.exists():
                 step(f"Generating brief for Ch {ch_num}...")
-                run_tool(f"uv run python gen_brief.py --panel {ch_num}", timeout=300)
+                uv_run("gen_brief.py", "--panel", ch_num, timeout=300)
                 # gen_brief.py may write to briefs/ — find the most recent brief
                 brief_candidates = sorted(
                     BRIEFS_DIR.glob(f"ch{ch_num:02d}*.md"),
@@ -549,10 +589,10 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
 
             # Run revision
             step(f"Revising Ch {ch_num} with brief {brief_file.name}...")
-            uv_run(f"gen_revision.py {ch_num} {brief_file}", timeout=600)
+            uv_run("gen_revision.py", ch_num, brief_file, timeout=600)
 
             # Evaluate revised chapter
-            post_eval = uv_run(f"evaluate.py --chapter={ch_num}", timeout=300)
+            post_eval = uv_run("evaluate.py", f"--chapter={ch_num}", timeout=300)
             post_score = parse_score(post_eval.stdout, "overall_score")
 
             ch_file = CHAPTERS_DIR / f"ch_{ch_num:02d}.md"
@@ -576,7 +616,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
 
         # -- Step 6: Full novel evaluation --
         step("Running full novel evaluation...")
-        full_eval = uv_run("evaluate.py --full", timeout=600)
+        full_eval = uv_run("evaluate.py", "--full", timeout=600)
         novel_score = parse_score(full_eval.stdout, "novel_score")
 
         if novel_score < 0:
@@ -619,12 +659,11 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             # Step 1: Generate the review
             step("Sending manuscript to Opus for review...")
             review_result = uv_run(
-                f"review.py --output reviews.md", timeout=900)
-            
+                "review.py", "--output", "reviews.md", timeout=900)
+
             # Step 2: Parse the review
             step("Parsing review...")
-            parse_result = run_tool(
-                "uv run python review.py --parse", timeout=60)
+            parse_result = uv_run("review.py", "--parse", timeout=60)
             print(parse_result.stdout if parse_result else "")
             
             # Step 3: Check stopping condition
@@ -654,7 +693,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             gen_brief_py = BASE_DIR / "gen_brief.py"
             if gen_brief_py.exists():
                 # Auto mode: picks weakest chapter, cross-references all sources
-                run_tool("uv run python gen_brief.py --auto", timeout=300)
+                uv_run("gen_brief.py", "--auto", timeout=300)
                 
                 # Find any generated briefs and apply the top one
                 recent_briefs = sorted(
@@ -667,7 +706,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
                     if ch_match:
                         ch_num = int(ch_match.group(1))
                         step(f"Revising Ch {ch_num} from review brief...")
-                        uv_run(f"gen_revision.py {ch_num} {brief}", timeout=600)
+                        uv_run("gen_revision.py", ch_num, brief, timeout=600)
                         git_add_commit(
                             f"review round {rnd}: revise ch{ch_num:02d} from Opus feedback")
             
@@ -676,9 +715,8 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             step("Running mechanical cleanup pass...")
             apply_cuts_py = BASE_DIR / "apply_cuts.py"
             if apply_cuts_py.exists():
-                run_tool(
-                    "uv run python apply_cuts.py all --types OVER-EXPLAIN REDUNDANT --min-fat 15",
-                    timeout=300)
+                uv_run("apply_cuts.py", "all", "--types", "OVER-EXPLAIN", "REDUNDANT",
+                       "--min-fat", "15", timeout=300)
                 git_add_commit(f"review round {rnd}: mechanical cleanup")
             
             step(f"Review round {rnd} complete.")
@@ -738,15 +776,14 @@ def run_export(state: dict) -> dict:
     build_tex = BASE_DIR / "typeset" / "build_tex.py"
     if build_tex.exists():
         step("Building LaTeX content...")
-        run_tool(f"uv run python typeset/build_tex.py", timeout=120)
+        uv_run("typeset/build_tex.py", timeout=120)
 
         # 5. Typeset with tectonic (if available)
         novel_tex = BASE_DIR / "typeset" / "novel.tex"
         if novel_tex.exists():
-            tectonic_check = run_tool("which tectonic", timeout=10)
-            if tectonic_check.returncode == 0:
+            if shutil.which("tectonic"):
                 step("Typesetting PDF with tectonic...")
-                result = run_tool("tectonic typeset/novel.tex", timeout=300)
+                result = run_argv(["tectonic", "typeset/novel.tex"], timeout=300)
                 if result.returncode == 0:
                     step("PDF generated: typeset/novel.pdf")
                 else:

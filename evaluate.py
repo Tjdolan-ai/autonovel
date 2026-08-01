@@ -274,7 +274,7 @@ def load_all_chapters():
 
 def call_judge(prompt, max_tokens=2000):
     """Call the Anthropic judge LLM and return its response text."""
-    import httpx
+    from api import post_with_retry
 
     headers = {
         "x-api-key": ANTHROPIC_API_KEY,
@@ -294,13 +294,13 @@ def call_judge(prompt, max_tokens=2000):
         ],
     }
 
-    resp = httpx.post(
+    resp = post_with_retry(
         f"{API_BASE_URL}/v1/messages",
         headers=headers,
         json=payload,
         timeout=180,
+        label="judge",
     )
-    resp.raise_for_status()
     return resp.json()["content"][0]["text"]
 
 
