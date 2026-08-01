@@ -21,7 +21,12 @@ def slop_check(ch):
     return slop_score(load_file(str(chapter_path(ch))))
 
 def pattern_check(ch):
-    text = chapter_path(ch).read_text()
+    # Missing file yields zeros, matching evaluate.load_file's convention, so
+    # a failed draft degrades the report instead of aborting the batch.
+    path = chapter_path(ch)
+    if not path.exists():
+        return 0, 0, 0
+    text = path.read_text(encoding="utf-8")
     didnot = len(re.findall(r'He did not|He had not', text))
     thought = len(re.findall(r'He thought about|He thought of', text))
     words = len(text.split())

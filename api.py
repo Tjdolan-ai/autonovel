@@ -8,6 +8,8 @@ the errors that are worth retrying, and leaves everything else to raise.
 """
 import sys
 import time
+from datetime import datetime, timezone
+from email.utils import parsedate_to_datetime
 
 import httpx
 
@@ -16,15 +18,35 @@ RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 
 MAX_ATTEMPTS = 4
 BASE_BACKOFF = 2.0  # seconds; doubles each attempt (2, 4, 8)
+MAX_RETRY_AFTER = 300.0  # cap, so an absurd header can't stall the pipeline
 
 
 def retry_after_seconds(resp, default):
-    """Honour a Retry-After header when the server sends one."""
-    raw = resp.headers.get("retry-after", "")
+    """
+    Honour a Retry-After header when the server sends one.
+
+    RFC 9110 allows either delay-seconds or an HTTP-date; accept both, and
+    fall back to the caller's backoff when the header is absent or unparseable.
+    """
+    raw = resp.headers.get("retry-after", "").strip()
+    if not raw:
+        return default
+
     try:
-        return max(float(raw), 0.0)
+        return min(max(float(raw), 0.0), MAX_RETRY_AFTER)
+    except (TypeError, ValueError):
+        pass
+
+    try:
+        when = parsedate_to_datetime(raw)
     except (TypeError, ValueError):
         return default
+    if when is None:
+        return default
+    if when.tzinfo is None:
+        when = when.replace(tzinfo=timezone.utc)
+    delta = (when - datetime.now(timezone.utc)).total_seconds()
+    return min(max(delta, 0.0), MAX_RETRY_AFTER)
 
 
 def post_with_retry(url, *, headers, json, timeout,

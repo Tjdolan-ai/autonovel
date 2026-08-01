@@ -19,6 +19,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import shutil
 import subprocess
 import sys
@@ -134,7 +135,10 @@ def run_argv(argv: list[str], timeout: int = 600,
     or metacharacter expansion.
     Returns CompletedProcess; never raises unless check=True.
     """
-    step(f"RUN: {' '.join(argv)}")
+    argv = [str(a) for a in argv]
+    # shlex.join quotes each element, so the log line is unambiguous about
+    # where one argument ends and the next begins.
+    step(f"RUN: {shlex.join(argv)}")
     try:
         result = subprocess.run(
             argv, capture_output=True, text=True,
@@ -160,8 +164,7 @@ def run_argv(argv: list[str], timeout: int = 600,
 
 def uv_run(script: str, *script_args, timeout: int = 600) -> subprocess.CompletedProcess:
     """Shorthand for 'uv run python <script> [args...]' from project root."""
-    return run_argv(["uv", "run", "python", script, *[str(a) for a in script_args]],
-                    timeout=timeout)
+    return run_argv(["uv", "run", "python", script, *script_args], timeout=timeout)
 
 
 # ---------------------------------------------------------------------------
