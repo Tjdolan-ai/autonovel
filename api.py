@@ -18,7 +18,26 @@ RETRY_STATUS = {408, 409, 429, 500, 502, 503, 504, 529}
 
 MAX_ATTEMPTS = 4
 BASE_BACKOFF = 2.0  # seconds; doubles each attempt (2, 4, 8)
-MAX_RETRY_AFTER = 300.0  # cap, so an absurd header can't stall the pipeline
+MAX_RETRY_AFTER = 60.0  # cap, so an absurd header can't stall the pipeline
+
+# Per-attempt HTTP timeouts, kept here so run_pipeline.py can size its
+# subprocess timeouts to cover a full retry sequence. An outer timeout
+# shorter than the budget below silently defeats the retries.
+DRAFT_TIMEOUT = 600   # draft_chapter.py, gen_revision.py — full chapter generation
+JUDGE_TIMEOUT = 180   # evaluate.py — scoring
+REVIEW_TIMEOUT = 600  # review.py — full manuscript
+
+
+def retry_budget(per_attempt, max_attempts=MAX_ATTEMPTS, margin=60):
+    """
+    Worst-case wall time for a call that exhausts its retries.
+
+    Each gap between attempts is bounded by MAX_RETRY_AFTER, which dominates
+    the exponential schedule, so use it for all of them.
+    """
+    return int(per_attempt * max_attempts
+               + MAX_RETRY_AFTER * (max_attempts - 1)
+               + margin)
 
 
 def retry_after_seconds(resp, default):

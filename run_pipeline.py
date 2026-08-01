@@ -26,6 +26,8 @@ import sys
 from datetime import datetime
 from pathlib import Path
 
+import api
+
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
@@ -37,6 +39,13 @@ CHAPTERS_DIR = BASE_DIR / "chapters"
 BRIEFS_DIR = BASE_DIR / "briefs"
 EDIT_LOGS_DIR = BASE_DIR / "edit_logs"
 EVAL_LOGS_DIR = BASE_DIR / "eval_logs"
+
+# Subprocess budgets for the scripts that retry internally. These must exceed
+# the script's own worst-case retry sequence, or the orchestrator kills the
+# process mid-retry and the backoff never gets to do its job.
+DRAFT_BUDGET = api.retry_budget(api.DRAFT_TIMEOUT)
+JUDGE_BUDGET = api.retry_budget(api.JUDGE_TIMEOUT)
+REVIEW_BUDGET = api.retry_budget(api.REVIEW_TIMEOUT)
 
 FOUNDATION_THRESHOLD = 7.5
 CHAPTER_THRESHOLD = 6.0
@@ -171,24 +180,47 @@ def uv_run(script: str, *script_args, timeout: int = 600) -> subprocess.Complete
 # Helpers: git operations
 # ---------------------------------------------------------------------------
 
-# Directories and files the pipeline is allowed to commit. Anything else a
-# user happens to leave in the working tree stays unstaged.
-COMMIT_PATHS = ["chapters", "typeset", "state.json", "results.tsv"]
+# Files and directories the pipeline is allowed to commit — enumerated, not
+# globbed, so an unrelated file a user keeps in the checkout (private-notes.md,
+# a scratch export) is never swept into an automatic commit. Framework docs and
+# MYSTERY.md are deliberately absent: humans edit those and commit them
+# deliberately.
+COMMIT_PATHS = [
+    # pipeline outputs
+    "chapters",
+    "typeset",
+    "state.json",
+    "results.tsv",
+    "manuscript.md",
+    "arc_summary.md",
+    "reviews.md",
+    # layer files the pipeline evolves
+    "outline.md",
+    "world.md",
+    "characters.md",
+    "canon.md",
+    "voice.md",
+]
 
 
 def staged_pathspecs() -> list[str]:
-    """Existing paths from COMMIT_PATHS, plus any top-level .md files."""
-    paths = [p for p in COMMIT_PATHS if (BASE_DIR / p).exists()]
-    paths += sorted(p.name for p in BASE_DIR.glob("*.md"))
-    return paths
+    """The subset of COMMIT_PATHS that currently exists."""
+    return [p for p in COMMIT_PATHS if (BASE_DIR / p).exists()]
 
 
 def git_add_commit(message: str) -> str:
     """Stage the pipeline's own outputs and commit. Returns short hash or ''."""
     pathspecs = staged_pathspecs()
     if pathspecs:
+        # `add` picks up new files; `commit --only` then restricts the commit to
+        # those same paths, so anything the user had already staged is left in
+        # the index rather than swept in.
         run_argv(["git", "add", "-A", "--", *pathspecs])
-    result = run_argv(["git", "commit", "-m", message, "--allow-empty"])
+        commit_cmd = ["git", "commit", "--only", "-m", message,
+                      "--allow-empty", "--", *pathspecs]
+    else:
+        commit_cmd = ["git", "commit", "-m", message, "--allow-empty"]
+    result = run_argv(commit_cmd)
     if result.returncode == 0:
         hash_result = run_argv(["git", "rev-parse", "--short", "HEAD"])
         commit_hash = hash_result.stdout.strip()
@@ -305,7 +337,7 @@ def run_foundation(state: dict) -> dict:
 
         # 2. Evaluate
         step("Evaluating foundation...")
-        eval_result = uv_run("evaluate.py", "--phase=foundation", timeout=300)
+        eval_result = uv_run("evaluate.py", "--phase=foundation", timeout=JUDGE_BUDGET)
         score = parse_score(eval_result.stdout, "overall_score")
         lore = parse_lore_score(eval_result.stdout)
 
@@ -369,7 +401,7 @@ def run_drafting(state: dict) -> dict:
             step(f"Attempt {attempt}/{MAX_CHAPTER_ATTEMPTS}")
 
             # Draft
-            draft_result = uv_run("draft_chapter.py", ch, timeout=600)
+            draft_result = uv_run("draft_chapter.py", ch, timeout=DRAFT_BUDGET)
             if draft_result.returncode != 0:
                 step(f"Draft failed (exit {draft_result.returncode}), retrying...")
                 continue
@@ -384,7 +416,7 @@ def run_drafting(state: dict) -> dict:
             step(f"Drafted {word_count} words")
 
             # Evaluate
-            eval_result = uv_run("evaluate.py", f"--chapter={ch}", timeout=300)
+            eval_result = uv_run("evaluate.py", f"--chapter={ch}", timeout=JUDGE_BUDGET)
             score = parse_score(eval_result.stdout, "overall_score")
             step(f"Chapter {ch} score: {score}")
 
@@ -559,7 +591,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             banner(f"  Revising Ch {ch_num} ({question}) [{idx+1}/{len(consensus_items)}]", ".")
 
             # Snapshot the current chapter score for comparison
-            pre_eval = uv_run("evaluate.py", f"--chapter={ch_num}", timeout=300)
+            pre_eval = uv_run("evaluate.py", f"--chapter={ch_num}", timeout=JUDGE_BUDGET)
             pre_score = parse_score(pre_eval.stdout, "overall_score")
 
             # Generate revision brief
@@ -592,10 +624,10 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
 
             # Run revision
             step(f"Revising Ch {ch_num} with brief {brief_file.name}...")
-            uv_run("gen_revision.py", ch_num, brief_file, timeout=600)
+            uv_run("gen_revision.py", ch_num, brief_file, timeout=DRAFT_BUDGET)
 
             # Evaluate revised chapter
-            post_eval = uv_run("evaluate.py", f"--chapter={ch_num}", timeout=300)
+            post_eval = uv_run("evaluate.py", f"--chapter={ch_num}", timeout=JUDGE_BUDGET)
             post_score = parse_score(post_eval.stdout, "overall_score")
 
             ch_file = CHAPTERS_DIR / f"ch_{ch_num:02d}.md"
@@ -619,7 +651,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
 
         # -- Step 6: Full novel evaluation --
         step("Running full novel evaluation...")
-        full_eval = uv_run("evaluate.py", "--full", timeout=600)
+        full_eval = uv_run("evaluate.py", "--full", timeout=JUDGE_BUDGET)
         novel_score = parse_score(full_eval.stdout, "novel_score")
 
         if novel_score < 0:
@@ -662,7 +694,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
             # Step 1: Generate the review
             step("Sending manuscript to Opus for review...")
             review_result = uv_run(
-                "review.py", "--output", "reviews.md", timeout=900)
+                "review.py", "--output", "reviews.md", timeout=REVIEW_BUDGET)
 
             # Step 2: Parse the review
             step("Parsing review...")
@@ -709,7 +741,7 @@ def run_revision(state: dict, max_cycles: int = MAX_REVISION_CYCLES) -> dict:
                     if ch_match:
                         ch_num = int(ch_match.group(1))
                         step(f"Revising Ch {ch_num} from review brief...")
-                        uv_run("gen_revision.py", ch_num, brief, timeout=600)
+                        uv_run("gen_revision.py", ch_num, brief, timeout=DRAFT_BUDGET)
                         git_add_commit(
                             f"review round {rnd}: revise ch{ch_num:02d} from Opus feedback")
             

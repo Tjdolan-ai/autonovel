@@ -18,7 +18,7 @@ API_BASE = os.environ.get("AUTONOVEL_API_BASE_URL", "https://api.anthropic.com")
 CHAPTERS_DIR = BASE_DIR / "chapters"
 
 def call_writer(prompt, max_tokens=16000):
-    from api import post_with_retry
+    from api import DRAFT_TIMEOUT, post_with_retry
     headers = {
         "x-api-key": API_KEY,
         "anthropic-version": "2023-06-01",
@@ -41,7 +41,7 @@ def call_writer(prompt, max_tokens=16000):
         "messages": [{"role": "user", "content": prompt}],
     }
     resp = post_with_retry(f"{API_BASE}/v1/messages", headers=headers,
-                           json=payload, timeout=600, label="draft")
+                           json=payload, timeout=DRAFT_TIMEOUT, label="draft")
     return resp.json()["content"][0]["text"]
 
 def load_file(path):

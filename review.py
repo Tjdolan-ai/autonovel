@@ -38,7 +38,7 @@ REVIEW_PROMPT = """Read the below novel, "{title}". Review it first as a literar
 
 def call_opus(prompt, max_tokens=8000):
     """Call Opus with the full manuscript."""
-    from api import post_with_retry
+    from api import REVIEW_TIMEOUT, post_with_retry
     headers = {
         "x-api-key": API_KEY,
         "anthropic-version": "2023-06-01",
@@ -54,7 +54,7 @@ def call_opus(prompt, max_tokens=8000):
     print(f"Sending to {REVIEW_MODEL} ({len(prompt):,} chars)...", file=sys.stderr)
     resp = post_with_retry(
         f"{API_BASE}/v1/messages",
-        headers=headers, json=payload, timeout=600, label="review",
+        headers=headers, json=payload, timeout=REVIEW_TIMEOUT, label="review",
     )
     return resp.json()["content"][0]["text"]
 
