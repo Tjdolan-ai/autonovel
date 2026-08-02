@@ -7,3 +7,15 @@ dependencies = [
     "httpx>=0.28.1",
     "python-dotenv>=1.2.2",
 ]
+
+[project.optional-dependencies]
+# Cover art, ornaments, vectorization. Also needs the `potrace` and
+# `fontconfig` binaries on PATH.
+art = [
+    "pillow>=11.0.0",
+    "cairosvg>=2.7.1",
+]
+# Multi-voice audiobook generation.
+audio = [
+    "elevenlabs>=1.0.0",
+]

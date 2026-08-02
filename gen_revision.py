@@ -16,7 +16,7 @@ API_KEY = os.environ.get("ANTHROPIC_API_KEY", "")
 API_BASE = os.environ.get("AUTONOVEL_API_BASE_URL", "https://api.anthropic.com")
 
 def call_writer(prompt, max_tokens=16000):
-    import httpx
+    from api import DRAFT_TIMEOUT, post_with_retry
     headers = {
         "x-api-key": API_KEY,
         "anthropic-version": "2023-06-01",
@@ -35,8 +35,8 @@ def call_writer(prompt, max_tokens=16000):
         ),
         "messages": [{"role": "user", "content": prompt}],
     }
-    resp = httpx.post(f"{API_BASE}/v1/messages", headers=headers, json=payload, timeout=600)
-    resp.raise_for_status()
+    resp = post_with_retry(f"{API_BASE}/v1/messages", headers=headers,
+                           json=payload, timeout=DRAFT_TIMEOUT, label="revision")
     return resp.json()["content"][0]["text"]
 
 def main():

@@ -4,26 +4,36 @@ import subprocess
 import sys
 import re
 import json
+from pathlib import Path
 
-def run(cmd, timeout=600):
-    r = subprocess.run(cmd, shell=True, capture_output=True, text=True, timeout=timeout)
+BASE_DIR = Path(__file__).parent
+
+def run(argv, timeout=600):
+    r = subprocess.run(argv, capture_output=True, text=True,
+                       timeout=timeout, cwd=str(BASE_DIR))
     return r.stdout + r.stderr, r.returncode
 
+def chapter_path(ch):
+    return BASE_DIR / "chapters" / f"ch_{ch:02d}.md"
+
 def slop_check(ch):
-    out, _ = run(f'.venv/bin/python3 -c "from evaluate import slop_score, load_file; import json; r=slop_score(load_file(\'chapters/ch_{ch:02d}.md\')); print(json.dumps(r))"')
-    return json.loads(out.strip())
+    from evaluate import slop_score, load_file
+    return slop_score(load_file(str(chapter_path(ch))))
 
 def pattern_check(ch):
-    out, _ = run(f"grep -c 'He did not\\|He had not' chapters/ch_{ch:02d}.md")
-    didnot = int(out.strip()) if out.strip().isdigit() else 0
-    out, _ = run(f"grep -c 'He thought about\\|He thought of' chapters/ch_{ch:02d}.md")
-    thought = int(out.strip()) if out.strip().isdigit() else 0
-    out, _ = run(f"wc -w < chapters/ch_{ch:02d}.md")
-    words = int(out.strip())
+    # Missing file yields zeros, matching evaluate.load_file's convention, so
+    # a failed draft degrades the report instead of aborting the batch.
+    path = chapter_path(ch)
+    if not path.exists():
+        return 0, 0, 0
+    text = path.read_text(encoding="utf-8")
+    didnot = len(re.findall(r'He did not|He had not', text))
+    thought = len(re.findall(r'He thought about|He thought of', text))
+    words = len(text.split())
     return words, didnot, thought
 
 def spot_eval(ch):
-    out, rc = run(f'.venv/bin/python3 evaluate.py --chapter={ch}', timeout=300)
+    out, rc = run([sys.executable, "evaluate.py", f"--chapter={ch}"], timeout=300)
     m_overall = re.search(r'overall_score: ([\d.]+)', out)
     m_raw = re.search(r'raw_judge_score: (\d+)', out)
     if m_overall and m_raw:
@@ -42,7 +52,7 @@ for ch in chapters:
     print(f"{'='*50}")
     
     # Draft
-    out, rc = run(f'.venv/bin/python3 draft_chapter.py {ch}')
+    out, rc = run([sys.executable, "draft_chapter.py", str(ch)])
     if rc != 0:
         print(f"  DRAFT FAILED: {out[:200]}")
         results.append((ch, 0, 0, "FAILED"))
@@ -72,14 +82,14 @@ for ch in chapters:
     results.append((ch, words, slop['slop_penalty'], score))
     
     # Git commit
-    run(f"cd /home/jeffq/autonovel && git add chapters/ch_{ch:02d}.md state.json")
-    
+    run(["git", "add", f"chapters/ch_{ch:02d}.md", "state.json"])
+
     # Update state.json
-    with open("state.json") as f:
+    with open(BASE_DIR / "state.json") as f:
         state = json.load(f)
     state["current_focus"] = f"ch_{ch:02d}"
     state["chapters_drafted"] = ch
-    with open("state.json", "w") as f:
+    with open(BASE_DIR / "state.json", "w") as f:
         json.dump(state, f, indent=2)
 
 print(f"\n\n{'='*60}")

@@ -206,6 +206,51 @@ The pipeline uses three external services:
 Copy `.env.example` to `.env` and fill in your keys. Only the Anthropic
 key is required for the core pipeline. Art and audiobook are optional.
 
+Art and audiobook also need extra Python packages and system binaries:
+
+```bash
+uv sync                          # core pipeline (Anthropic only)
+uv sync --extra art              # + Pillow, cairosvg. Needs potrace + fontconfig on PATH
+uv sync --extra audio            # + elevenlabs
+```
+
+PDF typesetting additionally requires `tectonic`.
+
+---
+
+## Privacy & Cost
+
+**What leaves your machine.** Three destinations, and you control which are
+live purely by which keys you set:
+
+| Destination | What is sent | When |
+|-------------|--------------|------|
+| `api.anthropic.com` | Your full manuscript text, on every draft, eval, and review call | Always — required by the core pipeline |
+| `fal.run` | Art prompts derived from your prose | Only if `FAL_KEY` is set |
+| ElevenLabs | Chapter text for narration | Only if `ELEVENLABS_API_KEY` is set |
+
+Leave `FAL_KEY` and `ELEVENLABS_API_KEY` empty and your manuscript touches
+exactly one vendor. `--phase foundation`, `--phase drafting`, and
+`--phase revision` only ever call Anthropic.
+
+**Cost.** A full run is 15-30 hours of API time for a 75k-word novel
+(see [PIPELINE.md](PIPELINE.md)), and the judge and review models default to
+Opus. Set a spend limit in the Anthropic console before your first
+`--from-scratch` run, and use a project-scoped API key so you can revoke it
+independently. Test with `--phase foundation` first — it's the cheapest phase
+and shakes out config errors.
+
+**Manuscript privacy.** The pipeline auto-commits after every kept
+experiment. Nothing in it needs a git remote — if the manuscript is
+confidential, don't add one, or use a private repository.
+
+**Isolation.** The pipeline runs unattended for hours, shells out to itself,
+and calls `git reset --hard` to discard failed experiments. Run it in a
+container or a dedicated checkout, not somewhere with uncommitted work you
+care about. Seeds, briefs, and reference documents you did not write yourself
+are untrusted input — they reach the model, and the model's output drives
+filenames and subprocess arguments.
+
 ---
 
 ## Production History
