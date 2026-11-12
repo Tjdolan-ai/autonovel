@@ -113,45 +113,109 @@ After writing any passage, ask:
 
 ---
 
-## Part 2: Voice Identity (generated per novel)
+## Part 2: Voice Identity — The Unfinished Name
 
-Everything below is discovered during the foundation phase.
-The agent proposes a voice that serves THIS story, writes exemplar
-passages, and calibrates against them throughout drafting.
+Derived from the drafted Prologue–Chapter Eleven. The saved chapters are
+the tuning fork; when this description and the prose disagree, the prose wins.
 
 ### Tone
-<!-- Generated during foundation. Examples:
-     "Mythic and weighty, like stone tablets being read aloud."
-     "Warm, slightly breathless, like a traveler telling stories by firelight."
-     "Spare and cold. Sentences like knife cuts." -->
+Restrained, exact, quietly tense. A supernatural investigative thriller
+told like careful testimony: what was seen, what was recorded, what the
+record leaves out. Dread comes from small discrepancies (a transcript
+line, a missing entry, a latch that clicks twice), not from atmosphere.
+Faith is sincere and unsentimental. Grace shows up in ordinary acts —
+coffee in a church basement, a stack of cups handed over without questions.
 
 ### Sentence Rhythm
-<!-- Generated during foundation. Not rules -- tendencies.
-     "Long sentences for worldbuilding, short for violence."
-     "Dialogue is clipped. Narration flows." -->
+Short declarative sentences carry most of the weight. One-line paragraphs
+land turns ("This had taken less than a second."). Longer sentences are
+reserved for a character's precise reasoning or a remembered history.
+Scenes end on a concrete action or record, not a summary.
 
 ### Vocabulary Register
-<!-- Generated during foundation. The word-hoard for this world.
-     What does this world SOUND like? Anglo-Saxon blunt? Latinate
-     baroque? Colloquial modern? A mix? -->
+Plain contemporary English with professional precision: archival terms
+(folio, wrapper, accession, ledger, siglum), lab and engineering terms
+(run, queue, configuration, log), and liturgical/biblical language only
+when a character would naturally use it. No ornate metaphors. Metaphors,
+when used, come from records, handwriting, equipment, recovery meetings.
 
 ### POV and Tense
-<!-- Generated during foundation.
-     Third limited? First? Rotating? Omniscient?
-     Past tense? Present? Does it shift for effect? -->
+Close third person, past tense. Primarily Dr. Elias Cade; selected chapters
+from Sister Miriam Halevi. The narrator never knows more than the viewpoint
+character and never certifies a disputed event as divine, demonic, or
+mechanical. Interpretations belong to characters.
 
 ### Dialogue Conventions
-<!-- Generated during foundation.
-     Tags: "said" only? Action beats? No tags at all?
-     How do characters sound different from each other?
-     Subtext rules: do characters say what they mean? -->
+"Said" or no tag; action beats preferred. People speak in short, practical
+lines and often answer a question with a narrower question. Subtext over
+statement. Characters disagree sincerely without speeches.
+- Cade: careful, self-qualifying, slips toward hope; delays hard sentences.
+- Miriam: precise, asks for dates, marks, and evidence; dry under strain.
+- Jonah: blunt, practical, funny when tired; insists failures stay in the record.
+- Kestrel: smooth, accommodating, always offering access or a next step.
+- Marcus: formal, guarded, speaks in the Order's inherited claims.
+- Lucia: warm, procedural, believes testing preserves revelation.
+- Adrian Ellis: brief, confident, unobtrusive. Never signal an alias.
+
+### Double-Meaning Standard (governing rule)
+The first meaning must work in the scene; the second must deepen it without
+solving the mystery.
+- Action before allusion: a door, record, witness statement, or instruction
+  has a practical purpose before it acquires a second meaning.
+- Use choices more often than quotations.
+- Two or three prominent echoes per chapter is a ceiling, not a quota.
+- Distinguish a clue from its interpretation. Keep human explanations
+  (prior access, shared documents, rehearsal, compromised records, technical
+  failure) plausible where the evidence allows.
+- Never hide what the viewpoint character plainly notices; conceal causes,
+  not observations. Never invent an "earlier clue" the prose didn't show.
+- No loaded narration: never call an early event possession, revelation,
+  demonic intervention, or divine answer.
+- Let a repeated phrase change a choice, trust, access, or interpretation.
+- Keep authority and capability distinct.
+- Do not decode echoes inside the scene ("this represented surrender").
+- Revision test: works without knowing the ending? Gains meaning with it?
+  Character still has a reason to act if the allusion is removed?
 
 ### Exemplar Passages
-<!-- 3-5 paragraphs that ARE the voice. Written during foundation.
-     The agent calibrates every chapter against these.
-     These are the tuning fork. -->
+Father Matteo Rinaldi had said stop twice.
+
+On the screen beside his hand, the transcript read:
+
+*RINALDI: Yes. Continue.*
+
+---
+
+Rinaldi had spent forty-one years studying the small alterations by which
+one person acquired authority over another person's words. A doubtful mark
+made into a full letter. A question copied as a declaration. An explanation
+entering the margin and, a century later, becoming part of the text.
+
+This had taken less than a second.
+
+---
+
+They had met in a church basement, long before either man had access to a
+university laboratory. Jonah had been making coffee strong enough to disguise
+how little of it there was. Cade had arrived early because he did not trust
+himself with the twenty minutes between the bus stop and the meeting.
+
+Jonah had handed him a stack of cups and let him help without asking what he
+had done to need help himself.
+
+---
+
+On the form he gave her, the space for cause of death had been filled in.
+
+The space for her signature had not.
 
 ### Anti-Exemplars
-<!-- 3-5 paragraphs showing what this voice is NOT.
-     Not the generic anti-slop stuff above -- specific to this novel.
-     "This is too flowery for our tone." "This is too modern." -->
+- *A chill ran down Cade's spine as the ancient voice echoed through the
+  chamber, and he knew, deep in his soul, that something otherworldly had
+  spoken.* — certifies the supernatural, tells emotion, cliché.
+- *The missing entry was a symbol of everything the Church had hidden — and
+  of the silence Cade carried in his own heart.* — decodes the echo for the reader.
+- *"The Word was never singular," Ellis intoned, his eyes glittering with
+  dark knowledge.* — signals the villain; Ellis must stay unobtrusive.
+- *Three explanations remained possible: the machine, the men, or something
+  else entirely.* — narrator summarizing ambiguity instead of dramatizing it.

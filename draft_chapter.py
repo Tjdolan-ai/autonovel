@@ -10,6 +10,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent
+sys.path.insert(0, str(BASE_DIR))
+from book import TITLE, GENRE, POV_RULE, DRAFT_RULES
 load_dotenv(BASE_DIR / ".env")
 
 WRITER_MODEL = os.environ.get("AUTONOVEL_WRITER_MODEL", "claude-sonnet-4-6")
@@ -30,8 +32,8 @@ def call_writer(prompt, max_tokens=16000):
         "max_tokens": max_tokens,
         "temperature": 0.8,
         "system": (
-            "You are a literary fiction writer drafting a fantasy novel chapter. "
-            "You write in third-person limited past tense, locked to one POV character. "
+            f"You are a literary fiction writer drafting a chapter of a {GENRE}. "
+            "You write in close third person, past tense, locked to one POV character. "
             "You follow the voice definition exactly. You hit every beat in the outline. "
             "You never use words from the banned list. You show, never tell emotions. "
             "Your prose is specific, sensory, grounded. Metaphors come from the character's "
@@ -73,6 +75,7 @@ def main():
     characters = load_file(BASE_DIR / "characters.md")
     outline = load_file(BASE_DIR / "outline.md")
     canon = load_file(BASE_DIR / "canon.md")
+    ledger = load_file(BASE_DIR / "ledger.md")
     
     # Chapter-specific context
     chapter_outline = extract_chapter_outline(outline, chapter_num)
@@ -86,7 +89,7 @@ def main():
     else:
         prev_tail = "(first chapter -- no previous)"
     
-    prompt = f"""Write Chapter {chapter_num} of "The Second Son of the House of Bells."
+    prompt = f"""Write Chapter {chapter_num} of "{TITLE}."
 
 VOICE DEFINITION (follow this exactly):
 {voice}
@@ -106,18 +109,26 @@ WORLD BIBLE (reference for worldbuilding details):
 CHARACTER REGISTRY (reference for speech patterns and behavior):
 {characters}
 
+CANON (facts established by drafted chapters -- these override the outline):
+{canon}
+
+CLOCK AND CONSEQUENCES LEDGER (day, time, access, and who pays):
+{ledger}
+
+{DRAFT_RULES}
+
 WRITING INSTRUCTIONS:
 1. Write the COMPLETE chapter. Target ~3,200 words. Do not truncate or summarize.
-2. Third-person limited, past tense, locked to Cass's POV.
+2. {POV_RULE}
 3. Hit ALL numbered beats from the outline in order.
 4. Plant ALL foreshadowing elements listed under "Plants."
-5. Show sensory detail: what Cass hears, smells, feels physically.
-6. The under-note causes specific physical pain (needle behind left eye, not vague discomfort).
+5. Show sensory detail: what the POV character sees, hears, handles.
+6. Evidence is concrete: name the document, mark, time, log, or object.
 7. Dialogue follows the speech patterns defined in characters.md.
 8. No banned words from voice.md Part 1 guardrails.
 9. No AI fiction tells: no "a sense of," no "couldn't help but feel," no "eyes widened."
 10. Vary sentence length. Short sentences for impact. Longer ones to build.
-11. Metaphors from Cass's experience: sound, bronze, craft, the body's response to pitch.
+11. Metaphors from the POV character's experience (records, labs, archives, recovery, liturgy).
 12. Trust the reader. Don't explain what scenes mean. Let them land.
 13. Start the chapter in scene, not with exposition. End on a moment, not a summary.
 
@@ -135,11 +146,9 @@ PATTERNS TO AVOID (these have been flagged in previous chapters):
 19. NO section breaks (---) as rhythm crutches. Only use for genuine
     time/location jumps. Max 2 per chapter.
 20. VARY paragraph length deliberately. Never more than 3 consecutive
-    paragraphs of similar length. Include at least one 1-2 sentence
-    paragraph and one 6+ sentence paragraph.
-21. END the chapter differently from previous chapters. Do NOT end with
-    Cass outside listening to his father work. Find the ending that
-    belongs to THIS chapter specifically.
+    paragraphs of similar length.
+21. END the chapter differently from previous chapters. Find the ending
+    that belongs to THIS chapter specifically.
 22. INCLUDE at least one moment that surprises -- a character saying
     the wrong thing, an emotional beat arriving early or late, a detail
     that doesn't fit the expected pattern. Predictable excellence is
@@ -149,7 +158,7 @@ PATTERNS TO AVOID (these have been flagged in previous chapters):
     summary (narrator compressing time).
 24. DIALOGUE should sound like speech, not prose. Characters should
     occasionally stumble, interrupt, trail off, or say something
-    slightly wrong. A 14-year-old does not speak in polished epigrams.
+    slightly wrong. Nobody speaks in polished epigrams.
 
 Write the chapter now. Full text, beginning to end.
 """

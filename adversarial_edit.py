@@ -87,7 +87,7 @@ def parse_json(text):
                     return json.loads(text[start:i+1], strict=False)
         return json.loads(text[start:], strict=False)
 
-EDIT_PROMPT = """You are editing a fantasy novel chapter. Your job: identify exactly
+EDIT_PROMPT = """You are editing a chapter of a near-future supernatural investigative thriller. Your job: identify exactly
 what to cut or rewrite to make this chapter tighter, sharper, more alive.
 
 THE CHAPTER ({word_count} words):
@@ -103,6 +103,7 @@ YOUR TASK:
    - REDUNDANT: restates what a previous sentence/scene already showed
    - OVER-EXPLAIN: narrator explaining what the scene already demonstrated
    - GENERIC: could appear in any novel, not specific to this world/character
+   - LOADED: narrator certifies the supernatural or decodes a biblical echo
    - TELL: names an emotion or state instead of showing it
    - STRUCTURAL: paragraph/section that disrupts pacing or rhythm
 
@@ -116,7 +117,7 @@ Respond with JSON:
   "cuts": [
     {{
       "quote": "exact text from the chapter (10+ words)",
-      "type": "FAT|REDUNDANT|OVER-EXPLAIN|GENERIC|TELL|STRUCTURAL",
+      "type": "FAT|REDUNDANT|OVER-EXPLAIN|GENERIC|TELL|STRUCTURAL|LOADED",
       "reason": "why this should go",
       "action": "CUT or REWRITE",
       "rewrite": "replacement text if action is REWRITE, null if CUT"

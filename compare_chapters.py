@@ -74,7 +74,7 @@ def parse_json(text):
                     return json.loads(text[start:i+1], strict=False)
         return json.loads(text[start:], strict=False)
 
-COMPARE_PROMPT = """Compare these two chapters from the same fantasy novel.
+COMPARE_PROMPT = """Compare these two chapters from the same near-future supernatural thriller.
 Both are first drafts. Pick the BETTER one. You MUST pick a winner -- no ties.
 
 CHAPTER A (Ch {ch_a}):

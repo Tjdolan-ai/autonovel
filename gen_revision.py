@@ -9,6 +9,8 @@ from pathlib import Path
 from dotenv import load_dotenv
 
 BASE_DIR = Path(__file__).parent
+sys.path.insert(0, str(BASE_DIR))
+from book import TITLE, GENRE, POV_RULE, DRAFT_RULES
 load_dotenv(BASE_DIR / ".env")
 
 WRITER_MODEL = os.environ.get("AUTONOVEL_WRITER_MODEL", "claude-sonnet-4-6")
@@ -28,7 +30,7 @@ def call_writer(prompt, max_tokens=16000):
         "max_tokens": max_tokens,
         "temperature": 0.8,
         "system": (
-            "You are rewriting a fantasy novel chapter based on a specific revision brief. "
+            f"You are rewriting a chapter of a {GENRE} based on a specific revision brief. "
             "You follow the brief exactly. You preserve the voice, world, and characters "
             "from the existing draft while making the structural changes specified. "
             "You write the FULL chapter. Do not truncate or summarize."
@@ -46,6 +48,7 @@ def main():
     voice = (BASE_DIR / "voice.md").read_text()
     characters = (BASE_DIR / "characters.md").read_text()
     world = (BASE_DIR / "world.md").read_text()
+    canon = (BASE_DIR / "canon.md").read_text()
     brief = Path(brief_file).read_text()
     
     # Load adjacent chapters for continuity
@@ -58,7 +61,7 @@ def main():
     old_path = BASE_DIR / "chapters" / f"ch_{ch_num:02d}.md"
     old_text = old_path.read_text() if old_path.exists() else "(no existing draft)"
     
-    prompt = f"""Rewrite Chapter {ch_num} of "The Second Son of the House of Bells."
+    prompt = f"""Rewrite Chapter {ch_num} of "{TITLE}."
 
 REVISION BRIEF (follow this exactly):
 {brief}
@@ -71,6 +74,12 @@ CHARACTER REGISTRY:
 
 WORLD BIBLE:
 {world}
+
+CANON (must not be contradicted):
+{canon}
+
+{DRAFT_RULES}
+POV: {POV_RULE}
 
 PREVIOUS CHAPTER ENDING (maintain continuity):
 {prev_tail}

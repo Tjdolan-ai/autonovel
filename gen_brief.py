@@ -70,13 +70,14 @@ def extract_voice_rules() -> list[str]:
     rules: list[str] = []
 
     # Part 2 identity rules we always want
-    rules.append("Body-first emotion (jaw, ribs, tongue before naming the feeling)")
     rules.append("No telling after showing")
     rules.append("No triadic sensory lists")
     rules.append("70%+ in-scene (dialogue and action, not summary)")
     rules.append("Dialogue: clipped, subtext-heavy, 'said' default, no adverb tags")
-    rules.append("Sentence rhythm: mixed meter, fragments for pain, long for perception")
-    rules.append("Vocabulary from craft/trade/body wells — no generic fantasy diction")
+    rules.append("Sentence rhythm: short declaratives carry weight; one-line paragraphs land turns")
+    rules.append("Vocabulary from archives, labs, records, recovery, liturgy — no generic thriller diction")
+    rules.append("Narrator never certifies the supernatural or decodes a biblical echo")
+    rules.append("Conceal causes, not observations; keep human explanations available")
 
     # Part 1 structural slop
     rules.append("No paragraph-template-machine (vary structure)")

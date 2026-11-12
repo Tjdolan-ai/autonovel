@@ -24,6 +24,8 @@ from pathlib import Path
 
 # --- Configuration ---
 BASE_DIR = Path(__file__).parent
+sys.path.insert(0, str(BASE_DIR))
+from book import TITLE, GENRE, POV_RULE, DRAFT_RULES
 
 # Load .env file if present
 from dotenv import load_dotenv
@@ -348,7 +350,7 @@ def parse_json_response(text):
 
 # --- Foundation Evaluation ---
 
-FOUNDATION_PROMPT = """Evaluate these fantasy novel planning documents.
+FOUNDATION_PROMPT = """Evaluate these planning documents for a {genre}.
 
 SCORING CALIBRATION (read this before scoring anything):
 
@@ -396,7 +398,7 @@ CROSS-CHECKS (perform these before scoring):
      share the same sentence structures
 2. Check for missing NEGATIVE SPACE -- what's absent?
    - Are there gaps in the magic system that would block a specific
-     plot scene? (e.g., can Cass hear lies in written documents?
+     plot scene? (e.g., what exactly can SINTAX do and not do?
      What happens during the climax -- what rule resolves it?)
    - Are there characters needed for the plot who don't exist?
    - Are there scenes the outline demands that the world can't support?
@@ -517,17 +519,17 @@ invent something during drafting, your score is too high. Revise down.
 
 def evaluate_foundation():
     layers = load_layer_files()
-    prompt = FOUNDATION_PROMPT.format(**layers)
+    prompt = FOUNDATION_PROMPT.format(genre=GENRE, **layers)
     raw = call_judge(prompt, max_tokens=16000)
     return parse_json_response(raw)
 
 
 # --- Chapter Evaluation ---
 
-CHAPTER_PROMPT = """Evaluate this fantasy novel chapter against the planning docs.
+CHAPTER_PROMPT = """Evaluate this chapter of a {genre} against the planning docs.
 
 SCORING CALIBRATION:
-  9-10: Among the best chapters you've read in published fantasy. Name
+  9-10: Among the best chapters you've read in published fiction of this genre. Name
         a specific published chapter it competes with, or don't give 9+.
   7-8:  Strong, publishable with editorial polish. Specific flaws exist
         but don't break the reading experience.
@@ -577,7 +579,7 @@ CROSS-CHECKS (perform before scoring):
    summarize instead of dramatize.
 2. DIALOGUE REALISM: Read all dialogue aloud (mentally). Does it
    sound like speech or like written prose? Do characters say things
-   a 14-year-old / 60-year-old / etc. would actually say?
+   a scholar / engineer / cardinal / etc. would actually say?
 3. SCENE VS SUMMARY: How much of the chapter is in-scene (moment
    by moment, with dialogue and action) vs summary (narrator
    compressing time)? Chapters heavy on summary score lower on
@@ -601,7 +603,8 @@ Score these dimensions:
   rhythm variation, vocabulary wells, body-before-emotion principle,
   the specific tone described. Quote the strongest voice moment AND
   the weakest. Does ANY passage sound like generic fantasy prose that
-  could appear in any novel? If yes, score 7 max.
+  could appear in any thriller? If yes, score 7 max. Does the narrator
+  certify anything as divine/demonic, or decode a biblical echo? Score 6 max.
 
 - beat_coverage: Did it hit every beat from the outline? Were beats
   dramatized or merely mentioned? A beat that's summarized in a sentence
@@ -610,8 +613,8 @@ Score these dimensions:
 
 - character_voice: Remove all dialogue tags mentally. Can you tell who's
   speaking? Do characters ever sound alike? Does dialogue read as speech
-  or as written prose? Does Cass sound like a specific 14-year-old, or
-  like "young protagonist"? Does anyone say something surprising -- not
+  or as written prose? Does Cade sound like a specific person with his
+  history, or like "protagonist"? Does anyone say something surprising -- not
   just the right thing, but a REAL thing? Characters who never stumble,
   hesitate, or say something slightly wrong are AI-pattern characters.
 
@@ -621,7 +624,7 @@ Score these dimensions:
 
 - prose_quality: Sentence variety (measure: do 3+ consecutive sentences
   start the same way?). Specificity (concrete nouns > abstract).
-  Metaphors from Cass's experience, not from a thesaurus. Show-don't-tell
+  Metaphors from the POV character's experience, not from a thesaurus. Show-don't-tell
   at emotional peaks. QUOTE the weakest sentence and explain why. Also
   check for: repeated phrases, leaned-on constructions, paragraphs that
   could be cut without loss.
@@ -632,11 +635,14 @@ Score these dimensions:
 
 - canon_compliance: Check ALL facts against canon. List violations.
   One major violation caps score at 6. Check: character names, locations,
-  magic system rules, timeline, established events, physical descriptions.
+  supernatural limits, clock/timeline, established events, who knows what,
+  which permissions/tests have actually been granted or run.
 
 - lore_integration: Does the world do WORK in this chapter, or is it
-  set dressing? A scene that could happen in any fantasy city with
-  find-and-replace on proper nouns scores 5 max.
+  set dressing? Do archives, records, and technology produce evidence
+  and decisions? Do clues work first as ordinary scene actions?
+  A scene that could happen anywhere with find-and-replace on proper
+  nouns scores 5 max.
 
 - engagement: Would a reader turn the page? Where does tension come from --
   plot, character, mystery, prose? Is there a moment that SURPRISES?
@@ -684,10 +690,11 @@ def evaluate_chapter(chapter_num):
     chapter_outline = ch_match.group(0) if ch_match else "(outline entry not found)"
 
     # Load previous chapter tail
-    prev_text = load_chapter(chapter_num - 1) if chapter_num > 1 else "(first chapter)"
+    prev_text = load_chapter(chapter_num - 1) if chapter_num > 0 else "(first chapter)"
     prev_tail = prev_text[-3000:] if len(prev_text) > 3000 else prev_text
 
     prompt = CHAPTER_PROMPT.format(
+        genre=GENRE,
         voice=layers["voice"],
         world=layers["world"][:4000],  # truncate world bible
         characters=layers["characters"],
@@ -712,7 +719,8 @@ def evaluate_chapter(chapter_num):
 
 # --- Full Novel Evaluation ---
 
-FULL_NOVEL_PROMPT = """Evaluate this complete fantasy novel holistically.
+FULL_NOVEL_PROMPT = """Evaluate this {genre} holistically. It may be in progress;
+judge the chapters that exist against the outline for the rest.
 You have the planning docs and ALL chapter summaries with their individual scores.
 
 VOICE DEFINITION:
@@ -777,6 +785,7 @@ def evaluate_full():
         )
 
     prompt = FULL_NOVEL_PROMPT.format(
+        genre=GENRE,
         voice=layers["voice"],
         world_summary=layers["world"][:3000],
         characters=layers["characters"],
